@@ -1,2 +1,2 @@
-step 131
-url: https://viewsourcecode.org/snaptoken/kilo/06.search.html
+step 142
+url: https://viewsourcecode.org/snaptoken/kilo/07.syntaxHighlighting.html
