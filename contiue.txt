@@ -1,2 +1,0 @@
-step 171
-url: https://viewsourcecode.org/snaptoken/kilo/07.syntaxHighlighting.html
