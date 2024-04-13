@@ -41,6 +41,7 @@ enum editorKey {
 enum editorHighlight {
 	HL_NORMAL = 0,
 	HL_COMMENT,
+	HL_MLCOMMENT,
 	HL_KEYWORD1,
 	HL_KEYWORD2,
 	HL_STRING,
@@ -58,6 +59,8 @@ struct editorSyntax {
 	char **filematch;
 	char **keywords;
 	char *singleline_comment_start;
+	char *multiline_comment_start;
+	char *multiline_comment_end;
 	int flags;
 };
 
@@ -104,7 +107,7 @@ struct editorSyntax HLDB[] = {
 		"c",
 		C_HL_extensions,
 		C_HL_keywords,
-		"//",
+		"//", "/*", "*/",
 		HL_HIGHLIGHT_NUMBERS | HL_HIGHLIGHT_STRINGS
 	},
 };
@@ -244,10 +247,16 @@ void editorUpdateSyntax(erow *row) {
 	char **keywords = E.syntax->keywords;
 
 	char *scs = E.syntax->singleline_comment_start;
+	char *mcs = E.syntax->multiline_comment_start;
+	char *mce = E.syntax->multiline_comment_end;
+
 	int scs_len = scs ? strlen(scs) : 0;
+	int mcs_len = mcs ? strlen(mcs) : 0;
+	int mce_len = mce ? strlen(mce) : 0;
 
 	int prev_sep = 1;
 	int in_string = 0;
+	int in_comment = 0;
 
 	int i = 0;
 	while (i < row->rsize) {
@@ -258,6 +267,27 @@ void editorUpdateSyntax(erow *row) {
 			if (!strncmp(&row->render[i], scs, scs_len)) {
 				memset(&row->hl[i], HL_COMMENT, row->rsize - 1);
 				break;
+			}
+		}
+
+		if (mcs_len && mce_len && !in_string) {
+			if (in_comment) {
+				row->hl[i] = HL_MLCOMMENT;
+				if (!strncmp(&row->render[i], mce, mce_len)) {
+					memset(&row->hl[i], HL_MLCOMMENT, mce_len);
+					i += mce_len;
+					in_comment = 0;
+					prev_sep = 1;
+					continue;
+				} else {
+					i++;
+					continue;
+				}
+			} else if (!strncmp(&row->render[i], mcs, mcs_len)) {
+				memset(&row->hl[i], HL_MLCOMMENT, mcs_len);
+				i += mcs_len;
+				in_comment = 1;
+				continue;
 			}
 		}
 
@@ -320,7 +350,8 @@ void editorUpdateSyntax(erow *row) {
 
 int editorSyntaxToColor(int hl) {
 	switch (hl) {
-		case HL_COMMENT: return 36;
+		case HL_COMMENT:
+		case HL_MLCOMMENT: return 36;
 		case HL_KEYWORD1: return 33;
 		case HL_KEYWORD2: return 32;
 		case HL_STRING: return 35;
@@ -727,7 +758,17 @@ void editorDrawRows(struct abuf *ab) {
 			int current_color = -1;
 			int j;
 			for (j = 0; j < len; j++) {
-				if (hl[j] == HL_NORMAL) {
+				if (iscntrl(c[j])) {
+					char sym = (c[j] <= 26) ? '@' + c[j] : '?';
+					abAppend(ab, "\x1b[7m", 4);
+					abAppend(ab, &sym, 1);
+					abAppend(ab, "\x1b[m", 3);
+					if (current_color != -1) {
+						char buf[16];
+						int clen = snprintf(buf, sizeof(buf), "\x1b[%dm", current_color);
+						abAppend(ab, buf, clen);
+					}
+				} else if (hl[j] == HL_NORMAL) {
 					if (current_color != -1) {
 						abAppend(ab, "\x1b[39m", 5);
 						current_color = -1;
